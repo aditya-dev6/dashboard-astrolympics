@@ -1,0 +1,1863 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>AEGIS-9 // Final Crew Biomedical & Spacecraft Telemetry Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com" rel="preconnect">
+    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+          rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        space: {950: '#03060b', 900: '#070c17', 850: '#0c1424', 800: '#121d33', 700: '#1b2c4e'},
+                        wearable: {border: '#38bdf8', text: '#7dd3fc', dot: '#0ea5e9'},
+                        machine: {border: '#f43f5e', text: '#fda4af', dot: '#e11d48'}
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #03060b;
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+
+        .telemetry-grid {
+            background-size: 36px 36px;
+            background-image: linear-gradient(to right, rgba(27, 44, 78, 0.2) 1px, transparent 1px), linear-gradient(to bottom, rgba(27, 44, 78, 0.2) 1px, transparent 1px);
+        }
+
+        .hud-panel {
+            background: rgba(10, 16, 28, 0.85);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(56, 189, 248, 0.18);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .hud-panel-wearable {
+            background: linear-gradient(145deg, rgba(6, 10, 18, 0.95), rgba(12, 20, 34, 0.92));
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            box-shadow: 0 6px 24px rgba(2, 132, 199, 0.15);
+        }
+
+        .hud-panel-machine {
+            background: linear-gradient(145deg, rgba(22, 8, 13, 0.95), rgba(32, 11, 18, 0.92));
+            border: 1px solid rgba(244, 63, 94, 0.45);
+            box-shadow: 0 6px 24px rgba(225, 29, 72, 0.18);
+        }
+
+        .hud-panel-hybrid {
+            background: linear-gradient(145deg, rgba(9, 14, 25, 0.95), rgba(22, 11, 20, 0.93));
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+        }
+
+        @keyframes pulseRing {
+            0% {
+                transform: scale(0.85);
+                opacity: 0.9;
+            }
+            70% {
+                transform: scale(2.1);
+                opacity: 0;
+            }
+            100% {
+                transform: scale(2.1);
+                opacity: 0;
+            }
+        }
+
+        .sensor-pulse {
+            transform-box: fill-box;
+            transform-origin: center;
+            animation: pulseRing 2.4s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+        }
+
+        @keyframes scanVertical {
+            0% {
+                transform: translateY(0px);
+                opacity: 0.15;
+            }
+            50% {
+                opacity: 0.45;
+            }
+            100% {
+                transform: translateY(470px);
+                opacity: 0.15;
+            }
+        }
+
+        .body-scanline {
+            animation: scanVertical 6s ease-in-out infinite alternate;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #070c17;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #1b2c4e;
+            border-radius: 9999px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #38bdf8;
+        }
+    </style>
+</head>
+<body class="min-h-screen telemetry-grid font-sans antialiased selection:bg-sky-500/30 selection:text-sky-200">
+
+<!-- TOP MISSION HEADER & CABIN ECLSS BAR -->
+<header class="sticky top-0 z-30 border-b border-slate-800/90 bg-space-950/90 backdrop-blur-md">
+    <div class="max-w-[1600px] mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
+
+        <!-- Left: Mission Identity & Crew Selector -->
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-lg bg-sky-500/10 border border-sky-400/40 flex items-center justify-center text-sky-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round"
+                          stroke-linejoin="round"/>
+                </svg>
+            </div>
+            <div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xs font-mono uppercase tracking-widest text-sky-400 font-semibold">AEGIS-9 // FINAL TELEMETRY</span>
+                    <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                          id="global-status-pill">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>NOMINAL
+                        </span>
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-slate-800/90 text-sky-300 border border-sky-500/30"
+                          id="json-source-pill">SRC: nominal_flight.json</span>
+                </div>
+                <div class="flex items-center gap-2 mt-0.5">
+                    <select aria-label="Select Crew Profile"
+                            class="bg-transparent text-sm font-semibold text-white focus:outline-none cursor-pointer pr-1"
+                            id="crew-selector"></select>
+                    <span class="text-slate-600 text-xs">|</span>
+                    <span class="text-xs font-mono text-slate-400" id="met-clock">MET 184d 12:42:19</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center: Source Filter Legend -->
+        <div class="flex items-center bg-space-900/90 p-1 rounded-xl border border-slate-800 gap-1">
+            <button class="source-filter-btn px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-slate-800 text-white shadow-sm"
+                    data-filter="all">
+                All Active
+            </button>
+            <button class="source-filter-btn px-3 py-1.5 rounded-lg text-xs font-medium transition-all text-slate-400 hover:text-sky-300 flex items-center gap-1.5"
+                    data-filter="wearable">
+                <span class="w-2.5 h-2.5 rounded-full bg-space-950 border-2 border-sky-400 inline-block"></span>Wearables
+                (Black)
+            </button>
+            <button class="source-filter-btn px-3 py-1.5 rounded-lg text-xs font-medium transition-all text-slate-400 hover:text-rose-300 flex items-center gap-1.5"
+                    data-filter="machine">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span>Spacecraft Units (Red)
+            </button>
+        </div>
+
+        <!-- Right: JSON Feed & Action Controls -->
+        <div class="flex items-center gap-2">
+            <label class="cursor-pointer px-3 py-1.5 rounded-lg text-xs font-mono font-medium border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-all flex items-center gap-1.5"
+                   for="quick-json-upload">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" stroke-linecap="round"
+                          stroke-linejoin="round"/>
+                </svg>
+                <span>Load .JSON</span>
+            </label>
+            <input accept=".json,application/json" class="hidden" id="quick-json-upload" type="file"/>
+
+            <button class="px-3 py-1.5 rounded-lg text-xs font-mono font-medium border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-all flex items-center gap-1.5"
+                    id="open-json-studio-btn">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span>JSON Feed & Schema</span>
+            </button>
+
+            <button class="px-3 py-1.5 rounded-lg text-xs font-medium border border-sky-500/40 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25 transition-all flex items-center gap-1.5"
+                    id="open-matrix-btn">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                All 9 Systems
+            </button>
+        </div>
+    </div>
+
+    <!-- FIRST-PRIORITY CABIN ENVIRONMENT (ECLSS) STRIP -->
+    <div class="border-t border-slate-800/70 bg-space-900/70">
+        <div class="max-w-[1600px] mx-auto px-4 py-1.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div class="flex items-center gap-2">
+                <span class="px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 font-mono text-[10px] uppercase">UNIT // ECLSS</span>
+                <span class="text-slate-400 font-medium">Cabin Environment (First-Priority):</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-4 sm:gap-6 font-mono">
+                <div class="flex items-center gap-1.5"><span class="text-slate-400">CO₂:</span><span
+                        class="text-rose-200 font-semibold"
+                        id="val-eclss_co2">2.3</span><span
+                        class="text-slate-500">mmHg</span></div>
+                <div class="flex items-center gap-1.5"><span class="text-slate-400">O₂:</span><span
+                        class="text-emerald-300 font-semibold"
+                        id="val-eclss_o2">21.2</span><span
+                        class="text-slate-500">kPa</span></div>
+                <div class="flex items-center gap-1.5"><span class="text-slate-400">PRESS:</span><span
+                        class="text-slate-200 font-semibold" id="val-cabin_pressure">101.3</span><span
+                        class="text-slate-500">kPa</span></div>
+                <div class="flex items-center gap-1.5"><span class="text-slate-400">TEMP / RH:</span><span
+                        class="text-slate-200 font-semibold" id="val-cabin_temp">22.4°C</span><span
+                        class="text-slate-500">/</span><span class="text-slate-200 font-semibold"
+                                                             id="val-cabin_humidity">48%</span></div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<!-- MAIN COCKPIT CONTAINER -->
+<main class="max-w-[1600px] mx-auto px-4 py-4 space-y-4">
+
+    <!-- ROW 1: QUICK & FIRST-PRIORITY MONITORS -->
+    <section aria-label="First-Priority Vitals" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+
+        <!-- Priority 1: Heart Rate & ECG -->
+        <div class="hud-panel-wearable rounded-2xl p-3.5 relative overflow-hidden flex flex-col justify-between">
+            <div class="flex items-start justify-between gap-2">
+                <div>
+                    <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-sky-400"></span><span
+                            class="text-[11px] font-mono uppercase tracking-wider text-sky-300">Wearable // Bio-Harness</span>
+                    </div>
+                    <h2 class="text-sm font-semibold text-white mt-0.5">Heart Rate & ECG Lead II</h2>
+                </div>
+                <div class="text-right font-mono">
+                    <div class="flex items-baseline justify-end gap-1"><span class="text-2xl font-bold text-white"
+                                                                             id="val-hr_resting">64</span><span
+                            class="text-xs text-sky-300">bpm</span></div>
+                    <span class="text-[10px] text-slate-400">hr_resting</span>
+                </div>
+            </div>
+            <div class="mt-2 h-12 w-full rounded-lg bg-slate-950/90 border border-sky-500/20 overflow-hidden relative">
+                <canvas class="w-full h-full block" id="ecg-canvas"></canvas>
+                <span class="absolute bottom-1 right-2 text-[9px] font-mono text-sky-400/70">ecg_waveform_lead2 (mV)</span>
+            </div>
+        </div>
+
+        <!-- Priority 2: Blood Pressure -->
+        <div class="hud-panel-wearable rounded-2xl p-3.5 flex flex-col justify-between">
+            <div class="flex items-start justify-between gap-2">
+                <div>
+                    <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-sky-400"></span><span
+                            class="text-[11px] font-mono uppercase tracking-wider text-sky-300">Wearable // Tonometry Band</span>
+                    </div>
+                    <h2 class="text-sm font-semibold text-white mt-0.5">Arterial Blood Pressure</h2>
+                </div>
+                <span class="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono text-[10px]">OPTIMAL</span>
+            </div>
+            <div class="mt-3 flex items-end justify-between">
+                <div class="font-mono">
+                    <div class="flex items-baseline gap-1"><span class="text-2xl font-bold text-white" id="val-bp">118 / 75</span><span
+                            class="text-xs text-sky-300">mmHg</span></div>
+                    <span class="text-[10px] text-slate-400">bp_systolic / bp_diastolic</span>
+                </div>
+                <div class="text-right font-mono text-xs text-slate-300">
+                    <div>MAP <span class="text-sky-300 font-semibold" id="val-map">89</span> mmHg</div>
+                    <div class="text-[10px] text-slate-500">Continuous Optical</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Priority 3: Radiation Exposure -->
+        <div class="hud-panel-wearable rounded-2xl p-3.5 flex flex-col justify-between transition-colors"
+             id="card-radiation">
+            <div class="flex items-start justify-between gap-2">
+                <div>
+                    <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-sky-400"></span><span
+                            class="text-[11px] font-mono uppercase tracking-wider text-sky-300">Wearable // RAM-07 Dosimeter</span>
+                    </div>
+                    <h2 class="text-sm font-semibold text-white mt-0.5">Radiation Exposure</h2>
+                </div>
+                <span class="px-2 py-0.5 rounded-md bg-sky-500/15 text-sky-300 border border-sky-500/30 font-mono text-[10px]"
+                      id="badge-radiation">GCR BASELINE</span>
+            </div>
+            <div class="mt-3 flex items-end justify-between font-mono">
+                <div>
+                    <div class="flex items-baseline gap-1"><span class="text-2xl font-bold text-white"
+                                                                 id="val-dosimeter_dose_rate">0.42</span><span
+                            class="text-xs text-sky-300">μSv/h</span></div>
+                    <span class="text-[10px] text-slate-400">dosimeter_dose_rate</span>
+                </div>
+                <div class="text-right">
+                    <div class="text-sm font-semibold text-slate-200"><span
+                            id="val-cumulative_mission_dose">142.8</span> <span
+                            class="text-xs text-slate-400">mSv</span></div>
+                    <div class="text-[10px] text-slate-500">cumulative_mission_dose</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Priority 4: Intracranial Pressure (SANS) -->
+        <div class="hud-panel-machine rounded-2xl p-3.5 flex flex-col justify-between transition-colors" id="card-icp">
+            <div class="flex items-start justify-between gap-2">
+                <div>
+                    <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-500"></span><span
+                            class="text-[11px] font-mono uppercase tracking-wider text-rose-300">Spacecraft Unit // ICP & OCT</span>
+                    </div>
+                    <h2 class="text-sm font-semibold text-white mt-0.5">Intracranial Pressure (ICP)</h2>
+                </div>
+                <span class="px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-300 border border-rose-500/30 font-mono text-[10px]"
+                      id="badge-icp">SANS WATCH</span>
+            </div>
+            <div class="mt-3 flex items-end justify-between font-mono">
+                <div>
+                    <div class="flex items-baseline gap-1"><span class="text-2xl font-bold text-white"
+                                                                 id="val-icp_estimated">13.8</span><span
+                            class="text-xs text-rose-300">mmHg</span></div>
+                    <span class="text-[10px] text-slate-400">icp_estimated</span>
+                </div>
+                <div class="text-right">
+                    <div class="text-sm font-semibold text-rose-200">ONSD <span id="val-onsd_quick">5.8</span> <span
+                            class="text-xs text-slate-400">mm</span></div>
+                    <div class="text-[10px] text-slate-500">Optic Sheath Diameter</div>
+                </div>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- ROW 2: CENTRAL ANATOMICAL STAGE WITH SVG LEADER LINES -->
+    <section aria-label="Anatomical Telemetry Map" class="hud-panel rounded-3xl p-4 sm:p-6 relative overflow-hidden">
+
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3 relative z-20">
+            <div class="flex items-center gap-2.5">
+                <span class="text-xs font-mono uppercase tracking-widest text-slate-400">Biomechanical Sensor Topology</span>
+                <span class="hidden sm:inline text-slate-700">•</span>
+                <span class="text-xs text-slate-400 hidden sm:inline">Click any body node or dialog box to inspect pre-flight baseline vs in-flight parameters</span>
+            </div>
+            <div class="flex items-center gap-3 text-[11px] font-mono">
+                <span class="flex items-center gap-1.5 text-sky-300"><span
+                        class="w-2.5 h-2.5 rounded-full bg-space-950 border-2 border-sky-400"></span>Wearables (Black)</span>
+                <span class="flex items-center gap-1.5 text-rose-300"><span
+                        class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>Spacecraft Machines (Red)</span>
+            </div>
+        </div>
+
+        <!-- ANATOMICAL STAGE GRID -->
+        <div class="relative min-h-[600px] lg:min-h-[630px] grid grid-cols-1 lg:grid-cols-12 gap-4 items-center"
+             id="anatomy-stage">
+
+            <svg class="hidden lg:block absolute inset-0 w-full h-full pointer-events-none z-10"
+                 id="leader-lines-svg"></svg>
+
+            <!-- LEFT DIALOG BOXES -->
+            <div class="lg:col-span-4 flex flex-col gap-3.5 z-20 order-2 lg:order-1">
+
+                <div class="telemetry-dialog hud-panel-machine rounded-2xl p-3.5 cursor-pointer transition-all hover:scale-[1.01] hover:border-rose-400 relative"
+                     data-sensor="brain">
+                    <span class="hidden lg:block absolute -right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-rose-500 border-2 border-space-950"
+                          data-anchor="brain"></span>
+                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                        <div class="flex items-center gap-2">
+                            <span class="px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 font-mono text-[10px]">UNIT + TABLET</span>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-white">2. Brain & Nervous</h3>
+                        </div>
+                        <span class="text-[11px] font-mono text-rose-300">Inspect →</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 font-mono text-xs">
+                        <div class="bg-black/35 rounded-lg p-2 border border-white/5">
+                            <div class="text-[10px] text-slate-400">pvt_reaction_time</div>
+                            <div class="text-sm font-semibold text-sky-300"><span id="dlg-pvt">234</span> <span
+                                    class="text-[10px]">ms</span></div>
+                        </div>
+                        <div class="bg-black/35 rounded-lg p-2 border border-white/5">
+                            <div class="text-[10px] text-slate-400">icp_estimated</div>
+                            <div class="text-sm font-semibold text-rose-300"><span id="dlg-icp">13.8</span> <span
+                                    class="text-[10px]">mmHg</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="telemetry-dialog hud-panel-machine rounded-2xl p-3.5 cursor-pointer transition-all hover:scale-[1.01] hover:border-rose-400 relative"
+                     data-sensor="eyes">
+                    <span class="hidden lg:block absolute -right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-rose-500 border-2 border-space-950"
+                          data-anchor="eyes"></span>
+                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                        <div class="flex items-center gap-2">
+                            <span class="px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 font-mono text-[10px]">MACHINE (RED)</span>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-white">6. Ocular / SANS</h3>
+                        </div>
+                        <span class="text-[11px] font-mono text-rose-300">Inspect →</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 font-mono text-xs">
+                        <div class="bg-black/35 rounded-lg p-2 border border-white/5">
+                            <div class="text-[10px] text-slate-400">optic_nerve_sheath_diameter</div>
+                            <div class="text-sm font-semibold text-rose-300"><span id="dlg-onsd">5.8</span> <span
+                                    class="text-[10px]">mm</span></div>
+                        </div>
+                        <div class="bg-black/35 rounded-lg p-2 border border-white/5">
+                            <div class="text-[10px] text-slate-400">iop_pressure</div>
+                            <div class="text-sm font-semibold text-slate-200"><span id="dlg-iop">18.2</span> <span
+                                    class="text-[10px]">mmHg</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="telemetry-dialog hud-panel-wearable rounded-2xl p-3.5 cursor-pointer transition-all hover:scale-[1.01] hover:border-sky-400 relative"
+                     data-sensor="heart">
+                    <span class="hidden lg:block absolute -right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-sky-400 border-2 border-space-950"
+                          data-anchor="heart"></span>
+                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                        <div class="flex items-center gap-2">
+                            <span class="px-1.5 py-0.5 rounded bg-sky-500/20 border border-sky-500/40 text-sky-300 font-mono text-[10px]">WEARABLE + ICG</span>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-white">1. Cardiovascular</h3>
+                        </div>
+                        <span class="text-[11px] font-mono text-sky-300">Inspect →</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 font-mono text-xs">
+                        <div class="bg-black/35 rounded-lg p-2 border border-white/5">
+                            <div class="text-[10px] text-slate-400">hr_resting</div>
+                            <div class="text-sm font-semibold text-sky-300"><span id="dlg-hr">64</span> <span
+                                    class="text-[10px]">bpm</span></div>
+                        </div>
+                        <div class="bg-black/35 rounded-lg p-2 border border-white/5">
+                            <div class="text-[10px] text-slate-400">sv_index</div>
+                            <div class="text-sm font-semibold text-rose-300"><span id="dlg-sv">42.8</span> <span
+                                    class="text-[10px]">mL/m²</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="telemetry-dialog hud-panel-hybrid rounded-2xl p-3.5 cursor-pointer transition-all hover:scale-[1.01] hover:border-slate-400 relative"
+                     data-sensor="wrist">
+                    <span class="hidden lg:block absolute -right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-sky-400 border-2 border-space-950"
+                          data-anchor="wrist"></span>
+                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                        <div class="flex items-center gap-2">
+                            <span class="px-1.5 py-0.5 rounded bg-slate-700/60 border border-slate-500/40 text-slate-200 font-mono text-[10px]">BAND + i-STAT</span>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-white">7. Blood, Immune & BP</h3>
+                        </div>
+                        <span class="text-[11px] font-mono text-slate-300">Inspect →</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 font-mono text-xs">
+                        <div class="bg-black/35 rounded-lg p-2 border border-white/5">
+                            <div class="text-[10px] text-slate-400">wbc_count</div>
+                            <div class="text-sm font-semibold text-rose-300"><span id="dlg-wbc">5.1</span> <span
+                                    class="text-[10px]">×10⁹/L</span></div>
+                        </div>
+                        <div class="bg-black/35 rounded-lg p-2 border border-white/5">
+                            <div class="text-[10px] text-slate-400">salivary_cortisol</div>
+                            <div class="text-sm font-semibold text-slate-200"><span id="dlg-cortisol">18.6</span> <span
+                                    class="text-[10px]">nmol/L</span></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- CENTER HUMAN MODEL -->
+            <div class="lg:col-span-4 flex flex-col items-center justify-center relative z-20 order-1 lg:order-2 py-2">
+                <div class="relative w-full max-w-[310px] aspect-[320/540] flex items-center justify-center">
+                    <div class="absolute inset-8 rounded-full bg-sky-500/10 blur-3xl pointer-events-none"></div>
+
+                    <svg class="w-full h-full overflow-visible select-none" id="human-body-svg" viewBox="0 0 320 540">
+                        <defs>
+                            <linearGradient id="bodyFillGrad" x1="0%" x2="0%" y1="0%" y2="100%">
+                                <stop offset="0%" stop-color="#0ea5e9" stop-opacity="0.22"/>
+                                <stop offset="50%" stop-color="#0284c7" stop-opacity="0.10"/>
+                                <stop offset="100%" stop-color="#0f172a" stop-opacity="0.25"/>
+                            </linearGradient>
+                            <linearGradient id="bodyStrokeGrad" x1="0%" x2="100%" y1="0%" y2="100%">
+                                <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.85"/>
+                                <stop offset="50%" stop-color="#0284c7" stop-opacity="0.45"/>
+                                <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.8"/>
+                            </linearGradient>
+                            <filter height="160%" id="glowCyan" width="160%" x="-30%" y="-30%">
+                                <feGaussianBlur result="blur" stdDeviation="3.5"/>
+                                <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+                            </filter>
+                            <filter height="160%" id="glowRed" width="160%" x="-30%" y="-30%">
+                                <feGaussianBlur result="blur" stdDeviation="3.5"/>
+                                <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+                            </filter>
+                        </defs>
+
+                        <ellipse cx="160" cy="516" fill="none" rx="76" ry="12" stroke="#38bdf8" stroke-dasharray="4 4"
+                                 stroke-opacity="0.3" stroke-width="1.2"/>
+                        <ellipse cx="160" cy="516" fill="rgba(14,165,233,0.08)" rx="48" ry="7" stroke="#38bdf8"
+                                 stroke-opacity="0.45" stroke-width="1"/>
+
+                        <path d="M 160 26 C 178 26, 190 39, 190 58 C 190 73, 182 85, 173 90 L 175 103 C 198 108, 224 117, 232 135 C 242 158, 250 196, 258 232 C 263 254, 268 273, 266 286 C 264 296, 255 297, 251 286 C 246 270, 238 234, 228 195 L 216 155 L 211 215 C 209 242, 213 266, 215 288 C 217 315, 212 365, 204 415 C 199 448, 197 478, 199 498 C 200 507, 192 512, 182 511 C 174 510, 173 501, 174 486 C 175 456, 174 412, 171 365 L 164 298 L 156 298 L 149 365 C 146 412, 145 456, 146 486 C 147 501, 146 510, 138 511 C 128 512, 120 507, 121 498 C 123 478, 121 448, 116 415 C 108 365, 103 315, 105 288 C 107 266, 111 242, 109 215 L 104 155 L 92 195 C 82 234, 74 270, 69 286 C 65 297, 56 296, 54 286 C 52 273, 57 254, 62 232 C 70 196, 78 158, 88 135 C 96 117, 122 108, 145 103 L 147 90 C 138 85, 130 73, 130 58 C 130 39, 142 26, 160 26 Z"
+                              fill="url(#bodyFillGrad)" stroke="url(#bodyStrokeGrad)" stroke-width="1.6"/>
+
+                        <g fill="none" opacity="0.45" stroke="#38bdf8" stroke-width="0.9">
+                            <path d="M 143 48 C 143 35, 177 35, 177 48 C 177 58, 170 63, 160 63 C 150 63, 143 58, 143 48 Z"
+                                  stroke-dasharray="2 2"/>
+                            <line stroke-dasharray="4 3" stroke-width="1.5" x1="160" x2="160" y1="88" y2="282"/>
+                            <path d="M 134 134 Q 160 144 186 134"/>
+                            <path d="M 130 150 Q 160 162 190 150"/>
+                            <path d="M 132 167 Q 160 179 188 167"/>
+                            <path d="M 136 184 Q 160 194 184 184"/>
+                            <path d="M 165 148 C 172 142, 180 150, 173 162 C 168 170, 162 168, 161 159 Z"
+                                  fill="rgba(244,63,94,0.28)" stroke="#f43f5e"/>
+                            <line stroke-dasharray="3 3" x1="138" x2="133" y1="295" y2="485"/>
+                            <line stroke-dasharray="3 3" x1="182" x2="187" y1="295" y2="485"/>
+                        </g>
+
+                        <line class="body-scanline" stroke="#38bdf8" stroke-opacity="0.55" stroke-width="1" x1="65"
+                              x2="255" y1="30"
+                              y2="30"/>
+
+                        <!-- SENSOR NODES -->
+                        <g class="body-sensor-node cursor-pointer" data-sensor="brain" data-type="machine"
+                           id="node-brain">
+                            <circle class="sensor-pulse" cx="152" cy="43" fill="none" r="10" stroke="#f43f5e"
+                                    stroke-width="1.2"/>
+                            <circle cx="152" cy="43" fill="#e11d48" filter="url(#glowRed)" r="5.5" stroke="#fff"
+                                    stroke-width="1.5"/>
+                        </g>
+                        <g class="body-sensor-node cursor-pointer" data-sensor="sleep" data-type="wearable"
+                           id="node-sleep">
+                            <circle class="sensor-pulse" cx="176" cy="41" fill="none" r="10" stroke="#38bdf8"
+                                    stroke-width="1.2"/>
+                            <circle cx="176" cy="41" fill="#090d16" filter="url(#glowCyan)" r="5.5" stroke="#38bdf8"
+                                    stroke-width="2"/>
+                        </g>
+                        <g class="body-sensor-node cursor-pointer" data-sensor="eyes" data-type="machine"
+                           id="node-eyes">
+                            <circle class="sensor-pulse" cx="147" cy="59" fill="none" r="9" stroke="#f43f5e"
+                                    stroke-width="1.2"/>
+                            <circle cx="147" cy="59" fill="#e11d48" filter="url(#glowRed)" r="5" stroke="#fff"
+                                    stroke-width="1.5"/>
+                        </g>
+                        <g class="body-sensor-node cursor-pointer" data-sensor="hearing" data-type="machine"
+                           id="node-hearing">
+                            <circle class="sensor-pulse" cx="189" cy="61" fill="none" r="9" stroke="#f43f5e"
+                                    stroke-width="1.2"/>
+                            <circle cx="189" cy="61" fill="#e11d48" filter="url(#glowRed)" r="5" stroke="#fff"
+                                    stroke-width="1.5"/>
+                        </g>
+                        <g class="body-sensor-node cursor-pointer" data-sensor="heart" data-type="wearable"
+                           id="node-heart">
+                            <circle class="sensor-pulse" cx="168" cy="155" fill="none" r="11" stroke="#38bdf8"
+                                    stroke-width="1.4"/>
+                            <circle cx="168" cy="155" fill="#090d16" filter="url(#glowCyan)" r="6" stroke="#38bdf8"
+                                    stroke-width="2.2"/>
+                        </g>
+                        <g class="body-sensor-node cursor-pointer" data-sensor="radiation" data-type="wearable"
+                           id="node-radiation">
+                            <circle class="sensor-pulse" cx="188" cy="192" fill="none" r="10" stroke="#38bdf8"
+                                    stroke-width="1.2"/>
+                            <circle cx="188" cy="192" fill="#090d16" filter="url(#glowCyan)" r="5.5" stroke="#38bdf8"
+                                    stroke-width="2"/>
+                        </g>
+                        <g class="body-sensor-node cursor-pointer" data-sensor="wrist" data-type="wearable"
+                           id="node-wrist">
+                            <circle class="sensor-pulse" cx="67" cy="256" fill="none" r="10" stroke="#38bdf8"
+                                    stroke-width="1.2"/>
+                            <circle cx="67" cy="256" fill="#090d16" filter="url(#glowCyan)" r="5.5" stroke="#38bdf8"
+                                    stroke-width="2"/>
+                        </g>
+                        <g class="body-sensor-node cursor-pointer" data-sensor="musculo" data-type="machine"
+                           id="node-musculo">
+                            <circle class="sensor-pulse" cx="183" cy="368" fill="none" r="11" stroke="#f43f5e"
+                                    stroke-width="1.3"/>
+                            <circle cx="183" cy="368" fill="#e11d48" filter="url(#glowRed)" r="6" stroke="#fff"
+                                    stroke-width="1.5"/>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- RIGHT DIALOG BOXES -->
+            <div class="lg:col-span-4 flex flex-col gap-3.5 z-20 order-3">
+
+                <div class="telemetry-dialog hud-panel-wearable rounded-2xl p-3.5 cursor-pointer transition-all hover:scale-[1.01] hover:border-sky-400 relative"
+                     data-sensor="sleep">
+                    <span class="hidden lg:block absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-sky-400 border-2 border-space-950"
+                          data-anchor="sleep"></span>
+                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                        <div class="flex items-center gap-2">
+                            <span class="px-1.5 py-0.5 rounded bg-sky-500/20 border border-sky-500/40 text-sky-300 font-mono text-[10px]">HEADBAND + TERM</span>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-white">3. Sleep & Psychology</h3>
+                        </div>
+                        <span class="text-[11px] font-mono text-sky-300">Inspect →</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 font-mono text-xs">
+                        <div class="bg-black/35 rounded-lg p-2 border border-white/5">
+                            <div class="text-[10px] text-slate-400">sleep_duration_hours</div>
+                            <div class="text-sm font-semibold text-sky-300"><span id="dlg-sleep">6.2 hrs</span></div>
+                        </div>
+                        <div class="bg-black/35 rounded-lg p-2 border border-white/5">
+                            <div class="text-[10px] text-slate-400">psych_stress_index</div>
+                            <div class="text-sm font-semibold text-rose-300"><span id="dlg-stress">4.2</span> <span
+                                    class="text-[10px]">/ 10</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="telemetry-dialog hud-panel-machine rounded-2xl p-3.5 cursor-pointer transition-all hover:scale-[1.01] hover:border-rose-400 relative"
+                     data-sensor="hearing">
+                    <span class="hidden lg:block absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-rose-500 border-2 border-space-950"
+                          data-anchor="hearing"></span>
+                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                        <div class="flex items-center gap-2">
+                            <span class="px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 font-mono text-[10px]">MACHINE (RED)</span>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-white">8. Auditory Threshold</h3>
+                        </div>
+                        <span class="text-[11px] font-mono text-rose-300">Inspect →</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 font-mono text-xs">
+                        <div class="bg-black/35 rounded-lg p-2 border border-white/5">
+                            <div class="text-[10px] text-slate-400">audiometric_loss_db</div>
+                            <div class="text-sm font-semibold text-rose-300"><span id="dlg-hearing">+12.5</span> <span
+                                    class="text-[10px]">dB</span></div>
+                        </div>
+                        <div class="bg-black/35 rounded-lg p-2 border border-white/5">
+                            <div class="text-[10px] text-slate-400">Band Tested</div>
+                            <div class="text-sm font-semibold text-slate-200">250Hz–8kHz</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="telemetry-dialog hud-panel-wearable rounded-2xl p-3.5 cursor-pointer transition-all hover:scale-[1.01] hover:border-sky-400 relative"
+                     data-sensor="radiation">
+                    <span class="hidden lg:block absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-sky-400 border-2 border-space-950"
+                          data-anchor="radiation"></span>
+                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                        <div class="flex items-center gap-2">
+                            <span class="px-1.5 py-0.5 rounded bg-sky-500/20 border border-sky-500/40 text-sky-300 font-mono text-[10px]">RAM-07 + BIO-LAB</span>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-white">4. Radiation &
+                                Cytogenetics</h3>
+                        </div>
+                        <span class="text-[11px] font-mono text-sky-300">Inspect →</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 font-mono text-xs">
+                        <div class="bg-black/35 rounded-lg p-2 border border-white/5">
+                            <div class="text-[10px] text-slate-400">dosimeter_dose_rate</div>
+                            <div class="text-sm font-semibold text-sky-300"><span id="dlg-rad-rate">0.42</span> <span
+                                    class="text-[10px]">μSv/h</span></div>
+                        </div>
+                        <div class="bg-black/35 rounded-lg p-2 border border-white/5">
+                            <div class="text-[10px] text-slate-400">dicentric_chromosome_freq</div>
+                            <div class="text-sm font-semibold text-rose-300"><span id="dlg-dicentric">2.8</span> <span
+                                    class="text-[10px]">/1k cells</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="telemetry-dialog hud-panel-machine rounded-2xl p-3.5 cursor-pointer transition-all hover:scale-[1.01] hover:border-rose-400 relative"
+                     data-sensor="musculo">
+                    <span class="hidden lg:block absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-rose-500 border-2 border-space-950"
+                          data-anchor="musculo"></span>
+                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                        <div class="flex items-center gap-2">
+                            <span class="px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 font-mono text-[10px]">MACHINE (RED)</span>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-white">5. Musculoskeletal</h3>
+                        </div>
+                        <span class="text-[11px] font-mono text-rose-300">Inspect →</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 font-mono text-xs">
+                        <div class="bg-black/35 rounded-lg p-2 border border-white/5">
+                            <div class="text-[10px] text-slate-400">dxa_bmd_tscore / spine</div>
+                            <div class="text-sm font-semibold text-rose-300"><span id="dlg-bmd">-1.2</span> / <span
+                                    id="dlg-spine">+4.2cm</span></div>
+                        </div>
+                        <div class="bg-black/35 rounded-lg p-2 border border-white/5">
+                            <div class="text-[10px] text-slate-400">vo2_max_estimated</div>
+                            <div class="text-sm font-semibold text-slate-200"><span id="dlg-vo2">43.5</span> <span
+                                    class="text-[10px]">mL/kg</span></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </section>
+
+</main>
+
+<!-- DRAG & DROP OVERLAY -->
+<div class="fixed inset-0 z-50 hidden items-center justify-center bg-sky-950/85 backdrop-blur-md border-4 border-dashed border-sky-400 m-4 rounded-3xl pointer-events-none"
+     id="drop-overlay">
+    <div class="text-center space-y-2">
+        <div class="w-16 h-16 mx-auto rounded-2xl bg-sky-500/20 border border-sky-400 flex items-center justify-center text-sky-300">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"/>
+            </svg>
+        </div>
+        <h3 class="text-xl font-bold text-white font-mono">DROP TELEMETRY .JSON PAYLOAD</h3>
+        <p class="text-sm text-sky-200">Automatically binds all 49 exact biomedical & ECLSS parameters</p>
+    </div>
+</div>
+
+<!-- TOAST BANNER -->
+<div class="fixed bottom-5 right-5 z-50 hidden items-center gap-2.5 px-4 py-3 rounded-2xl hud-panel border-emerald-500/50 text-xs font-mono text-emerald-200 shadow-2xl"
+     id="toast-banner">
+    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+    <span id="toast-message">JSON payload loaded successfully.</span>
+</div>
+
+<!-- JSON STUDIO MODAL -->
+<div class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+     id="json-studio-modal">
+    <div class="hud-panel border-slate-700 rounded-3xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+        <div class="px-5 py-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+            <div>
+                <span class="text-[11px] font-mono uppercase tracking-wider text-amber-400">JSON TELEMETRY FEED & SCHEMA</span>
+                <h3 class="text-lg font-bold text-white">External JSON Feed, Sample Payloads & Live Editor</h3>
+            </div>
+            <button class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors"
+                    id="close-json-studio-btn">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+        </div>
+        <div class="p-5 overflow-y-auto space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3 bg-space-900/90 p-3 rounded-2xl border border-slate-800">
+                <div class="flex flex-wrap items-center gap-2">
+                    <label class="cursor-pointer px-3 py-1.5 rounded-xl text-xs font-mono font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-all"
+                           for="studio-json-upload">↑
+                        Upload .json File</label>
+                    <input accept=".json,application/json" class="hidden" id="studio-json-upload" type="file"/>
+                    <button class="px-3 py-1.5 rounded-xl text-xs font-mono font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 transition-all"
+                            id="download-json-btn">
+                        ↓ Export / Download .json
+                    </button>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
+                    <span class="text-slate-400">Load Sample JSON:</span>
+                    <button class="preset-json-btn px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700"
+                            data-preset="nominal">
+                        nominal_flight.json
+                    </button>
+                    <button class="preset-json-btn px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-rose-300 border border-slate-700"
+                            data-preset="sans_alert">
+                        sans_icp_alert.json
+                    </button>
+                </div>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <label class="flex items-center gap-2 text-slate-300 cursor-pointer select-none">
+                    <input checked class="rounded bg-slate-800 border-slate-600 text-sky-500 focus:ring-0"
+                           id="live-jitter-toggle"
+                           type="checkbox">
+                    <span>Simulate Real-Time Sensor Micro-Jitter</span>
+                </label>
+                <span class="font-mono text-emerald-400" id="json-validation-status">✓ Valid JSON Schema (All 49 exact system keys mapped)</span>
+            </div>
+            <div class="relative">
+                <textarea
+                        class="w-full rounded-2xl bg-slate-950 border border-slate-700/90 p-4 font-mono text-xs text-sky-200 focus:outline-none focus:border-sky-400 leading-relaxed"
+                        id="json-editor-textarea" rows="16"
+                        spellcheck="false"></textarea>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+                <p class="text-[11px] text-slate-400">Requires top-level <code
+                        class="text-sky-300">baseline_telemetry</code> and <code class="text-sky-300">telemetry</code>
+                    keys.</p>
+                <button class="px-4 py-2 rounded-xl text-xs font-mono font-bold bg-sky-500 text-slate-950 hover:bg-sky-400 transition-all shadow-lg shadow-sky-500/20 shrink-0"
+                        id="apply-json-editor-btn">
+                    Apply JSON to Dashboard
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SUBSYSTEM INSPECTOR MODAL -->
+<div class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+     id="inspector-modal">
+    <div class="hud-panel border-slate-700 rounded-3xl max-w-3xl w-full max-h-[88vh] flex flex-col overflow-hidden shadow-2xl">
+        <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+            <div>
+                <span class="text-[11px] font-mono uppercase tracking-wider text-sky-400" id="modal-category-badge">SUBSYSTEM TELEMETRY</span>
+                <h3 class="text-lg font-bold text-white mt-0.5" id="modal-title">Cardiovascular System</h3>
+            </div>
+            <button class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors"
+                    id="close-inspector-btn">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+        </div>
+        <div class="p-5 overflow-y-auto space-y-4" id="modal-body"></div>
+    </div>
+</div>
+
+<!-- FULL 9-SYSTEM MATRIX MODAL -->
+<div class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/80 backdrop-blur-sm" id="matrix-modal">
+    <div class="hud-panel border-slate-700 rounded-3xl max-w-5xl w-full max-h-[88vh] flex flex-col overflow-hidden shadow-2xl">
+        <div class="px-5 py-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+            <div>
+                <span class="text-[11px] font-mono uppercase tracking-wider text-sky-400">COMPLETE BIOMEDICAL SPECIFICATION</span>
+                <h3 class="text-lg font-bold text-white">All 9 Telemetry Domains & Hardware Mapping</h3>
+            </div>
+            <div class="flex items-center gap-3">
+                <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+                    <input class="rounded bg-slate-800 border-slate-600 text-sky-500 focus:ring-0"
+                           id="show-optional-toggle"
+                           type="checkbox">
+                    <span>Show Marked Optional/Redundant Parameters</span>
+                </label>
+                <button class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors"
+                        id="close-matrix-btn">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <div class="p-5 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4" id="matrix-body"></div>
+    </div>
+</div>
+
+<script>
+    /**
+     * PARAMETER REGISTRY MAPPING ALL 49 SPECIFIED PARAMETERS
+     */
+    const PARAMETER_REGISTRY = {
+        hr_resting: {
+            domain: 'heart',
+            label: 'Heart Rate',
+            sourceType: 'wearable',
+            device: 'Bio-Harness Chest Patch / Pulse Oximeter',
+            unit: 'bpm'
+        },
+        ecg_waveform_lead2: {
+            domain: 'heart',
+            label: 'ECG Lead II',
+            sourceType: 'wearable',
+            device: '3-Lead Continuous ECG Strap',
+            unit: 'mV / trace'
+        },
+        bp_systolic: {
+            domain: 'heart',
+            label: 'Blood Pressure (Systolic)',
+            sourceType: 'wearable',
+            device: 'Optical Tonometry Wristband',
+            unit: 'mmHg'
+        },
+        bp_diastolic: {
+            domain: 'heart',
+            label: 'Blood Pressure (Diastolic)',
+            sourceType: 'wearable',
+            device: 'Optical Tonometry Wristband',
+            unit: 'mmHg'
+        },
+        sv_index: {
+            domain: 'heart',
+            label: 'Stroke Volume / Cardiac Output',
+            sourceType: 'machine',
+            device: 'Bioimpedance Cardiography (ICG) Unit',
+            unit: 'mL/m²'
+        },
+        plasma_volume_change_pct: {
+            domain: 'heart',
+            label: 'Plasma Volume Change',
+            sourceType: 'machine',
+            device: 'Automated Microfluidic Lab Analyzer (i-STAT)',
+            unit: '% vs baseline'
+        },
+
+        pvt_reaction_time: {
+            domain: 'brain',
+            label: 'Reaction Time (PVT)',
+            sourceType: 'wearable',
+            device: 'Psychomotor Vigilance Task (PVT) App (Crew Tablet)',
+            unit: 'ms'
+        },
+        pvt_lapse_count: {
+            domain: 'brain',
+            label: 'Attention Lapses',
+            sourceType: 'wearable',
+            device: 'VIGIL Task Software (Crew Tablet)',
+            unit: 'lapses >500ms'
+        },
+        cognitive_throughput_score: {
+            domain: 'brain',
+            label: 'Memory & Cognitive Performance',
+            sourceType: 'machine',
+            device: 'Cognitive Assessment Battery Terminal',
+            unit: 'points/min'
+        },
+        icp_estimated: {
+            domain: 'brain',
+            label: 'Intracranial Pressure (ICP)',
+            sourceType: 'machine',
+            device: 'Non-Invasive ICP Estimation Array / Tympanic',
+            unit: 'mmHg'
+        },
+        center_of_pressure_sway: {
+            domain: 'brain',
+            label: 'Balance / Posture Control',
+            sourceType: 'machine',
+            device: 'Posturography Force Plate',
+            unit: 'mm² area'
+        },
+        tracking_error_rms: {
+            domain: 'brain',
+            label: 'Eye-Hand Coordination',
+            sourceType: 'machine',
+            device: 'Tracking Test Peripheral Unit',
+            unit: 'pixels'
+        },
+        vestibulo_ocular_gain: {
+            domain: 'brain',
+            label: 'Vestibular Function',
+            sourceType: 'machine',
+            device: 'Optokinetic / Rotary Chair Diagnostics',
+            unit: 'ratio'
+        },
+        ventricle_volume_ratio: {
+            domain: 'brain',
+            label: 'Brain Position & Ventricle Vol.',
+            sourceType: 'machine',
+            device: 'Deep-Space Compact MRI Scanner / Ground Analysis',
+            unit: 'mL'
+        },
+
+        sleep_duration_hours: {
+            domain: 'sleep',
+            label: 'Sleep Duration & Efficiency',
+            sourceType: 'wearable',
+            device: 'Polysomnography Headband & Actigraphy Patch',
+            unit: 'hours / Eff %'
+        },
+        core_temp_circadian: {
+            domain: 'sleep',
+            label: 'Circadian Rhythm (Redundant Note)',
+            sourceType: 'wearable',
+            device: 'Core Body Temperature Circadian Patch',
+            unit: '°C',
+            redundant: true
+        },
+        psych_stress_index: {
+            domain: 'sleep',
+            label: 'Mood / Psychological State',
+            sourceType: 'machine',
+            device: 'Daily Psychological Evaluation Terminal / Voice Stress',
+            unit: 'scale 1–10'
+        },
+
+        dosimeter_dose_rate: {
+            domain: 'radiation',
+            label: 'Radiation Dose Rate',
+            sourceType: 'wearable',
+            device: 'Active Silicon Pixel Dosimeter (RAM-07)',
+            unit: 'μSv/h'
+        },
+        cumulative_mission_dose: {
+            domain: 'radiation',
+            label: 'Cumulative Mission Dose',
+            sourceType: 'wearable',
+            device: 'Active Silicon Pixel Dosimeter (RAM-07)',
+            unit: 'mSv'
+        },
+        dicentric_chromosome_freq: {
+            domain: 'radiation',
+            label: 'Chromosomal Aberrations',
+            sourceType: 'machine',
+            device: 'Automated Cytogenetic Assay Unit / Bio-Lab',
+            unit: 'per 1000 cells'
+        },
+
+        dxa_bmd_tscore: {
+            domain: 'musculo',
+            label: 'Bone Mineral Density',
+            sourceType: 'machine',
+            device: 'Portable Quantitative Ultrasound (QUS) / DEXA Unit',
+            unit: 'T-score'
+        },
+        serum_ctx_marker: {
+            domain: 'musculo',
+            label: 'Bone Turnover Markers',
+            sourceType: 'machine',
+            device: 'Microfluidic Immunoassay Analyzer',
+            unit: 'ng/mL'
+        },
+        urine_calcium_conc: {
+            domain: 'musculo',
+            label: 'Urinary Calcium',
+            sourceType: 'machine',
+            device: 'Urinalysis Cartridge Reader',
+            unit: 'mmol/L'
+        },
+        lean_body_mass: {
+            domain: 'musculo',
+            label: 'Muscle Mass & Volume',
+            sourceType: 'machine',
+            device: 'Anthropometric Bioimpedance Body Composition Analyzer',
+            unit: 'kg'
+        },
+        soleus_peak_torque: {
+            domain: 'musculo',
+            label: 'Muscle Strength',
+            sourceType: 'machine',
+            device: 'ARED Resistance Dynamometer Unit',
+            unit: 'N·m'
+        },
+        current_body_mass: {
+            domain: 'musculo',
+            label: 'Body Mass',
+            sourceType: 'machine',
+            device: 'Space Inertial Mass Measurement System (IMMS)',
+            unit: 'kg'
+        },
+        spinal_elongation_cm: {
+            domain: 'musculo',
+            label: 'Spine Length / Body Height',
+            sourceType: 'machine',
+            device: 'Laser Stadiometer',
+            unit: 'cm'
+        },
+        vo2_max_estimated: {
+            domain: 'musculo',
+            label: 'Aerobic Capacity (VO₂max)',
+            sourceType: 'machine',
+            device: 'Ergometer Metabolic Gas Analyzer',
+            unit: 'mL/kg/min'
+        },
+
+        visual_acuity_logmar: {
+            domain: 'eyes',
+            label: 'Visual Acuity',
+            sourceType: 'machine',
+            device: 'Electronic Snellen / Contrast Terminal',
+            unit: 'LogMAR'
+        },
+        refractive_error_spherical: {
+            domain: 'eyes',
+            label: 'Refraction (Farsighted Shift)',
+            sourceType: 'machine',
+            device: 'Handheld Auto-Refractor',
+            unit: 'Diopters'
+        },
+        rnfl_thickness: {
+            domain: 'eyes',
+            label: 'Retinal Nerve Fibre Layer (OCT)',
+            sourceType: 'machine',
+            device: 'Portable Optical Coherence Tomograph',
+            unit: 'μm'
+        },
+        optic_nerve_sheath_diameter: {
+            domain: 'eyes',
+            label: 'Optic Disc / Sheath Diameter',
+            sourceType: 'machine',
+            device: 'Ocular Ultrasound & Fundus Camera',
+            unit: 'mm'
+        },
+        iop_pressure: {
+            domain: 'eyes',
+            label: 'Intraocular Pressure',
+            sourceType: 'machine',
+            device: 'Handheld Tonometer',
+            unit: 'mmHg'
+        },
+        contrast_threshold_score: {
+            domain: 'eyes',
+            label: 'Contrast Sensitivity',
+            sourceType: 'machine',
+            device: 'Digital Vision Test Kit',
+            unit: 'dB'
+        },
+
+        wbc_count: {
+            domain: 'wrist',
+            label: 'White Blood Cell Count (WBC)',
+            sourceType: 'machine',
+            device: 'i-STAT Bio-MEMS Cartridge Unit',
+            unit: '×10⁹/L'
+        },
+        rbc_count: {
+            domain: 'wrist',
+            label: 'Red Blood Cell Count (RBC)',
+            sourceType: 'machine',
+            device: 'i-STAT Bio-MEMS Cartridge Unit',
+            unit: '×10⁹/L'
+        },
+        interleukin_panel_level: {
+            domain: 'wrist',
+            label: 'Immune Cell Function / Cytokines',
+            sourceType: 'machine',
+            device: 'Microfluidic Multiplex Assay Reader',
+            unit: 'pg/mL'
+        },
+        viral_load_copies: {
+            domain: 'wrist',
+            label: 'Latent Virus Reactivation',
+            sourceType: 'machine',
+            device: 'PCR Saliva/Blood Analyzer',
+            unit: 'copies/mL'
+        },
+        salivary_cortisol: {
+            domain: 'wrist',
+            label: 'Cortisol (Stress Hormones)',
+            sourceType: 'machine',
+            device: 'Salivary Assay Reader',
+            unit: 'nmol/L'
+        },
+        serum_vit_d: {
+            domain: 'wrist',
+            label: 'Vitamin D',
+            sourceType: 'machine',
+            device: 'Blood Spot Assay Kit',
+            unit: 'ng/mL'
+        },
+        net_caloric_balance: {
+            domain: 'wrist',
+            label: 'Energy Balance / Calorie Intake',
+            sourceType: 'machine',
+            device: 'Galley Smart Barcode / Metabolic Intake Tracker',
+            unit: 'kcal/day'
+        },
+
+        audiometric_loss_db: {
+            domain: 'hearing',
+            label: 'Hearing Threshold (250Hz–8kHz)',
+            sourceType: 'machine',
+            device: 'Acoustic Audiometer Headset & Booth Terminal',
+            unit: 'dB'
+        },
+
+        eclss_co2: {
+            domain: 'cabin',
+            label: 'CO₂ Partial Pressure',
+            sourceType: 'machine',
+            device: 'ECLSS Tunable Laser Spectrometer',
+            unit: 'mmHg'
+        },
+        eclss_o2: {
+            domain: 'cabin',
+            label: 'O₂ Partial Pressure',
+            sourceType: 'machine',
+            device: 'ECLSS Atmosphere Cell',
+            unit: 'kPa'
+        },
+        cabin_pressure: {
+            domain: 'cabin',
+            label: 'Cabin Pressure',
+            sourceType: 'machine',
+            device: 'Barometric Pressure Sensor Bay',
+            unit: 'kPa'
+        },
+        cabin_temp: {
+            domain: 'cabin',
+            label: 'Cabin Temperature',
+            sourceType: 'machine',
+            device: 'Environmental Control Thermohygrometer',
+            unit: '°C'
+        },
+        cabin_humidity: {
+            domain: 'cabin',
+            label: 'Cabin Humidity',
+            sourceType: 'machine',
+            device: 'Environmental Control Thermohygrometer',
+            unit: '%'
+        },
+        contaminant_ppm: {
+            domain: 'cabin',
+            label: 'Trace Contaminant Gases',
+            sourceType: 'machine',
+            device: 'Major Constituent Analyzer',
+            unit: 'ppm',
+            redundant: true
+        },
+        colony_forming_units: {
+            domain: 'cabin',
+            label: 'Microbial Load',
+            sourceType: 'machine',
+            device: 'Habitat Microbial Sampler',
+            unit: 'CFU',
+            redundant: true
+        },
+        sound_level_dba: {
+            domain: 'cabin',
+            label: 'Ambient Noise Level',
+            sourceType: 'machine',
+            device: 'Acoustic Dosimeter Bay',
+            unit: 'dBA',
+            redundant: true
+        },
+        water_tds_ppm: {
+            domain: 'cabin',
+            label: 'Potable Water Quality (TDS)',
+            sourceType: 'machine',
+            device: 'Water Quality Kit',
+            unit: 'ppm',
+            redundant: true
+        }
+    };
+
+    const DOMAIN_TITLES = {
+        heart: '1. Cardiovascular System',
+        brain: '2. Brain and Nervous System',
+        sleep: '3. Sleep and Psychology',
+        radiation: '4. Radiation & Cytogenetics',
+        musculo: '5. Musculoskeletal (All Spacecraft Units)',
+        eyes: '6. Eyes / Ocular SANS (All Spacecraft Units)',
+        wrist: '7. Blood and Immune System',
+        hearing: '8. Hearing / Auditory',
+        cabin: '9. Cabin Environment (ECLSS)'
+    };
+
+    const DEFAULT_PAYLOAD = {
+        "mission_meta": {
+            "mission_id": "Artemis-II",
+            "source_file": "artemis_ii_deep_space_flight.json",
+            "status": "NOMINAL // LUNAR FLYBY"
+        },
+        "cabin_environment": {
+            "eclss_co2": 2.3,
+            "eclss_o2": 21.2,
+            "cabin_pressure": 101.3,
+            "cabin_temp": 22.4,
+            "cabin_humidity": 48,
+            "contaminant_ppm": 0.02,
+            "colony_forming_units": 15,
+            "sound_level_dba": 54.2,
+            "water_tds_ppm": 65
+        },
+        "active_crew_id": "rostova",
+        "crew_profiles": {
+            "rostova": {
+                "name": "CDR. E. ROSTOVA",
+                "role": "Mission Commander",
+                "baseline_telemetry": {
+                    "hr_resting": 58,
+                    "ecg_waveform_lead2": 1.12,
+                    "bp_systolic": 114,
+                    "bp_diastolic": 72,
+                    "sv_index": 46.5,
+                    "plasma_volume_change_pct": 0.0,
+                    "pvt_reaction_time": 218,
+                    "pvt_lapse_count": 0,
+                    "cognitive_throughput_score": 94.2,
+                    "icp_estimated": 10.2,
+                    "center_of_pressure_sway": 142.0,
+                    "tracking_error_rms": 4.1,
+                    "vestibulo_ocular_gain": 0.98,
+                    "ventricle_volume_ratio": 45.0,
+                    "sleep_duration_hours": 7.8,
+                    "core_temp_circadian": 36.8,
+                    "psych_stress_index": 2.1,
+                    "dosimeter_dose_rate": 0.14,
+                    "cumulative_mission_dose": 12.4,
+                    "dicentric_chromosome_freq": 0.4,
+                    "dxa_bmd_tscore": 0.4,
+                    "serum_ctx_marker": 0.35,
+                    "urine_calcium_conc": 4.2,
+                    "lean_body_mass": 55.4,
+                    "soleus_peak_torque": 215.0,
+                    "current_body_mass": 64.2,
+                    "spinal_elongation_cm": 0.0,
+                    "vo2_max_estimated": 51.0,
+                    "visual_acuity_logmar": 0.0,
+                    "refractive_error_spherical": 0.0,
+                    "rnfl_thickness": 102,
+                    "optic_nerve_sheath_diameter": 4.7,
+                    "iop_pressure": 14.0,
+                    "contrast_threshold_score": 18.5,
+                    "wbc_count": 6.8,
+                    "rbc_count": 4.7,
+                    "interleukin_panel_level": 24.5,
+                    "viral_load_copies": 120.0,
+                    "salivary_cortisol": 12.4,
+                    "serum_vit_d": 34.0,
+                    "net_caloric_balance": 0.0,
+                    "audiometric_loss_db": 4.2
+                },
+                "telemetry": {
+                    "hr_resting": 64,
+                    "ecg_waveform_lead2": 1.18,
+                    "bp_systolic": 118,
+                    "bp_diastolic": 75,
+                    "sv_index": 42.8,
+                    "plasma_volume_change_pct": -14.5,
+                    "pvt_reaction_time": 234,
+                    "pvt_lapse_count": 2,
+                    "cognitive_throughput_score": 88.5,
+                    "icp_estimated": 13.8,
+                    "center_of_pressure_sway": 198.5,
+                    "tracking_error_rms": 6.8,
+                    "vestibulo_ocular_gain": 0.89,
+                    "ventricle_volume_ratio": 51.2,
+                    "sleep_duration_hours": 6.2,
+                    "core_temp_circadian": 37.1,
+                    "psych_stress_index": 4.2,
+                    "dosimeter_dose_rate": 0.42,
+                    "cumulative_mission_dose": 142.8,
+                    "dicentric_chromosome_freq": 2.8,
+                    "dxa_bmd_tscore": -1.2,
+                    "serum_ctx_marker": 0.82,
+                    "urine_calcium_conc": 7.8,
+                    "lean_body_mass": 52.1,
+                    "soleus_peak_torque": 168.0,
+                    "current_body_mass": 61.8,
+                    "spinal_elongation_cm": 4.2,
+                    "vo2_max_estimated": 43.5,
+                    "visual_acuity_logmar": 0.15,
+                    "refractive_error_spherical": 0.75,
+                    "rnfl_thickness": 118,
+                    "optic_nerve_sheath_diameter": 5.8,
+                    "iop_pressure": 18.2,
+                    "contrast_threshold_score": 14.1,
+                    "wbc_count": 5.1,
+                    "rbc_count": 4.1,
+                    "interleukin_panel_level": 42.1,
+                    "viral_load_copies": 840.0,
+                    "salivary_cortisol": 18.6,
+                    "serum_vit_d": 22.5,
+                    "net_caloric_balance": -320.0,
+                    "audiometric_loss_db": 12.5
+                }
+            }
+        }
+    };
+
+    let appJsonState = JSON.parse(JSON.stringify(DEFAULT_PAYLOAD));
+    let activeFilter = 'all';
+    let liveJitterEnabled = true;
+
+    function ingestJsonData(rawJson, fileName = 'custom_feed.json') {
+        const base = JSON.parse(JSON.stringify(DEFAULT_PAYLOAD));
+        if (rawJson.mission_meta) base.mission_meta = {...base.mission_meta, ...rawJson.mission_meta};
+        if (fileName) base.mission_meta.source_file = fileName;
+        if (rawJson.cabin_environment) {
+            Object.entries(rawJson.cabin_environment).forEach(([k, v]) => {
+                base.cabin_environment[k] = (v && typeof v === 'object' && 'value' in v) ? v.value : v;
+            });
+        }
+        if (rawJson.crew_profiles && typeof rawJson.crew_profiles === 'object') {
+            base.crew_profiles = rawJson.crew_profiles;
+            base.active_crew_id = rawJson.active_crew_id || Object.keys(base.crew_profiles)[0];
+        } else if (rawJson.telemetry || rawJson.baseline_telemetry) {
+            const crewId = rawJson.crew_id || 'imported_crew';
+            base.crew_profiles = {
+                [crewId]: {
+                    name: rawJson.crew_name || 'IMPORTED CREW',
+                    role: rawJson.role || 'Specialist',
+                    baseline_telemetry: rawJson.baseline_telemetry || DEFAULT_PAYLOAD.crew_profiles.rostova.baseline_telemetry,
+                    telemetry: rawJson.telemetry || rawJson
+                }
+            };
+            base.active_crew_id = crewId;
+        }
+        appJsonState = base;
+        populateCrewSelector();
+        syncJsonEditorTextarea();
+        updateDashboardFromJson(false);
+        showToast(`Loaded JSON: ${base.mission_meta.source_file}`);
+    }
+
+    function getActiveCrew() {
+        return appJsonState.crew_profiles[appJsonState.active_crew_id] || Object.values(appJsonState.crew_profiles)[0];
+    }
+
+    function populateCrewSelector() {
+        const select = document.getElementById('crew-selector');
+        if (!select) return;
+        select.innerHTML = Object.entries(appJsonState.crew_profiles).map(([id, p]) => `
+                <option value="${id}" class="bg-space-900 text-white" ${id === appJsonState.active_crew_id ? 'selected' : ''}>${p.name} — ${p.role}</option>
+            `).join('');
+    }
+
+    function syncJsonEditorTextarea() {
+        const ta = document.getElementById('json-editor-textarea');
+        if (ta) ta.value = JSON.stringify(appJsonState, null, 2);
+    }
+
+    function showToast(msg) {
+        const banner = document.getElementById('toast-banner');
+        const msgEl = document.getElementById('toast-message');
+        if (!banner || !msgEl) return;
+        msgEl.textContent = msg;
+        banner.classList.remove('hidden');
+        banner.classList.add('flex');
+        clearTimeout(window._toastTimer);
+        window._toastTimer = setTimeout(() => {
+            banner.classList.add('hidden');
+            banner.classList.remove('flex');
+        }, 3200);
+    }
+
+    function drawLeaderLines() {
+        const stage = document.getElementById('anatomy-stage');
+        const svg = document.getElementById('leader-lines-svg');
+        if (!stage || !svg || window.innerWidth < 1024) {
+            if (svg) svg.innerHTML = '';
+            return;
+        }
+
+        const stageRect = stage.getBoundingClientRect();
+        svg.setAttribute('viewBox', `0 0 ${stageRect.width} ${stageRect.height}`);
+        svg.innerHTML = '';
+
+        const connections = [
+            {sensor: 'brain', side: 'left', type: 'machine'},
+            {sensor: 'eyes', side: 'left', type: 'machine'},
+            {sensor: 'heart', side: 'left', type: 'wearable'},
+            {sensor: 'wrist', side: 'left', type: 'wearable'},
+            {sensor: 'sleep', side: 'right', type: 'wearable'},
+            {sensor: 'hearing', side: 'right', type: 'machine'},
+            {sensor: 'radiation', side: 'right', type: 'wearable'},
+            {sensor: 'musculo', side: 'right', type: 'machine'}
+        ];
+
+        connections.forEach(conn => {
+            const nodeEl = document.getElementById(`node-${conn.sensor}`);
+            const anchorEl = document.querySelector(`[data-anchor="${conn.sensor}"]`);
+            if (!nodeEl || !anchorEl) return;
+
+            const isDimmed = (activeFilter === 'wearable' && conn.type !== 'wearable') || (activeFilter === 'machine' && conn.type !== 'machine');
+            const nRect = nodeEl.getBoundingClientRect();
+            const aRect = anchorEl.getBoundingClientRect();
+
+            const x1 = nRect.left + nRect.width / 2 - stageRect.left;
+            const y1 = nRect.top + nRect.height / 2 - stageRect.top;
+            const x2 = aRect.left + aRect.width / 2 - stageRect.left;
+            const y2 = aRect.top + aRect.height / 2 - stageRect.top;
+
+            const elbow = conn.side === 'left' ? -28 : 28;
+            const midX = x2 - elbow;
+            const points = `${x1},${y1} ${midX},${y2} ${x2},${y2}`;
+            const color = conn.type === 'wearable' ? '#38bdf8' : '#f43f5e';
+            const opacity = isDimmed ? '0.12' : '0.78';
+
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+            line.setAttribute('points', points);
+            line.setAttribute('fill', 'none');
+            line.setAttribute('stroke', color);
+            line.setAttribute('stroke-width', '1.4');
+            line.setAttribute('stroke-opacity', opacity);
+            if (conn.type === 'wearable') line.setAttribute('stroke-dasharray', '4 2');
+            svg.appendChild(line);
+
+            const joint = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            joint.setAttribute('cx', midX);
+            joint.setAttribute('cy', y2);
+            joint.setAttribute('r', '2.2');
+            joint.setAttribute('fill', color);
+            joint.setAttribute('fill-opacity', opacity);
+            svg.appendChild(joint);
+        });
+    }
+
+    function initEcgCanvas() {
+        const canvas = document.getElementById('ecg-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let phase = 0;
+
+        function resize() {
+            const r = canvas.parentElement.getBoundingClientRect();
+            canvas.width = r.width * window.devicePixelRatio;
+            canvas.height = r.height * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+
+        resize();
+        window.addEventListener('resize', resize);
+
+        function sample(t, amp) {
+            const x = t % 1;
+            if (x > 0.10 && x < 0.18) return -0.15 * amp * Math.sin(((x - 0.10) / 0.08) * Math.PI);
+            if (x > 0.24 && x < 0.27) return 0.18 * amp * Math.sin(((x - 0.24) / 0.03) * Math.PI);
+            if (x >= 0.27 && x <= 0.32) return -0.85 * amp * Math.sin(((x - 0.27) / 0.05) * Math.PI);
+            if (x > 0.32 && x < 0.36) return 0.28 * amp * Math.sin(((x - 0.32) / 0.04) * Math.PI);
+            if (x > 0.48 && x < 0.64) return -0.24 * amp * Math.sin(((x - 0.48) / 0.16) * Math.PI);
+            return 0;
+        }
+
+        function loop() {
+            const crew = getActiveCrew();
+            const hr = Number(crew.telemetry.hr_resting) || 64;
+            const amp = Number(crew.telemetry.ecg_waveform_lead2) || 1.1;
+            const w = canvas.clientWidth, h = canvas.clientHeight;
+            ctx.clearRect(0, 0, w, h);
+
+            ctx.strokeStyle = 'rgba(56,189,248,0.08)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, h / 2);
+            ctx.lineTo(w, h / 2);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            phase += (hr / 60) * 0.011;
+            for (let px = 0; px < w; px += 2) {
+                const st = (px / 95) + phase;
+                const y = (h * 0.58) + sample(st, amp) * (h * 0.42);
+                if (px === 0) ctx.moveTo(px, y); else ctx.lineTo(px, y);
+            }
+            ctx.stroke();
+            requestAnimationFrame(loop);
+        }
+
+        requestAnimationFrame(loop);
+    }
+
+    function applySourceFilter(filter) {
+        activeFilter = filter;
+        document.querySelectorAll('.source-filter-btn').forEach(btn => {
+            if (btn.dataset.filter === filter) {
+                btn.classList.add('bg-slate-800', 'text-white', 'shadow-sm');
+                btn.classList.remove('text-slate-400');
+            } else {
+                btn.classList.remove('bg-slate-800', 'text-white', 'shadow-sm');
+                btn.classList.add('text-slate-400');
+            }
+        });
+        drawLeaderLines();
+    }
+
+    function openSubsystemModal(sensorId) {
+        const crew = getActiveCrew();
+        const tel = crew.telemetry || {};
+        const base = crew.baseline_telemetry || tel;
+        const cabin = appJsonState.cabin_environment || {};
+
+        const modal = document.getElementById('inspector-modal');
+        const titleEl = document.getElementById('modal-title');
+        const badgeEl = document.getElementById('modal-category-badge');
+        const bodyEl = document.getElementById('modal-body');
+
+        const entries = Object.entries(PARAMETER_REGISTRY).filter(([, meta]) => meta.domain === sensorId);
+        titleEl.textContent = DOMAIN_TITLES[sensorId] || 'Subsystem Telemetry';
+        badgeEl.textContent = `CREW: ${crew.name} // PRE-FLIGHT BASELINE VS IN-FLIGHT`;
+
+        // PRE-FLIGHT VS IN-FLIGHT VISUAL COMPARISON CHART & DELTA CALCULATIONS
+        const chartHtml = `
+                <div class="rounded-2xl bg-space-950/90 border border-slate-800 p-4 space-y-3">
+                    <div class="flex items-center justify-between text-xs font-mono border-b border-slate-800 pb-2">
+                        <span class="text-sky-300 font-semibold uppercase tracking-wider">Pre-Flight Baseline vs. In-Flight Comparison</span>
+                        <div class="flex items-center gap-3">
+                            <span class="flex items-center gap-1 text-[10px] text-slate-400"><span class="w-2 h-2 rounded bg-slate-600 inline-block"></span>Pre-Flight (L-14d)</span>
+                            <span class="flex items-center gap-1 text-[10px] text-sky-300"><span class="w-2 h-2 rounded bg-sky-400 inline-block"></span>In-Flight</span>
+                        </div>
+                    </div>
+                    <div class="space-y-3 pt-1">
+                        ${entries.map(([key, meta]) => {
+            const cur = Number(sensorId === 'cabin' ? cabin[key] : tel[key]) || 0;
+            const pre = Number(sensorId === 'cabin' ? (cabin[key] * 0.98) : (base[key] !== undefined ? base[key] : cur)) || 0;
+            const max = Math.max(Math.abs(cur), Math.abs(pre), 1) * 1.35;
+            const curW = Math.min(Math.max((Math.abs(cur) / max) * 100, 6), 100);
+            const preW = Math.min(Math.max((Math.abs(pre) / max) * 100, 6), 100);
+            const delta = cur - pre;
+            const deltaStr = (delta >= 0 ? '+' : '') + delta.toFixed(1);
+            const isWearable = meta.sourceType === 'wearable';
+            const color = isWearable ? 'bg-sky-400' : 'bg-rose-500';
+
+            return `
+                                <div class="space-y-1">
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="font-medium text-slate-200">${meta.label}</span>
+                                        <span class="font-mono text-[11px] text-slate-300">
+                                            Pre: <span class="text-slate-400">${pre.toFixed(1)}</span> →
+                                            Now: <span class="${isWearable ? 'text-sky-300' : 'text-rose-300'} font-semibold">${cur.toFixed(1)}</span>
+                                            <span class="text-[10px] text-amber-300 ml-1">(${deltaStr} ${meta.unit})</span>
+                                        </span>
+                                    </div>
+                                    <div class="space-y-1 bg-black/40 p-2 rounded-xl border border-white/5">
+                                        <div class="w-full bg-slate-800/80 h-1.5 rounded-full overflow-hidden relative"><div class="bg-slate-500 h-full rounded-full" style="width: ${preW}%"></div></div>
+                                        <div class="w-full bg-slate-800/80 h-1.5 rounded-full overflow-hidden relative"><div class="${color} h-full rounded-full" style="width: ${curW}%"></div></div>
+                                    </div>
+                                </div>
+                            `;
+        }).join('')}
+                    </div>
+                </div>
+            `;
+
+        // DETAILED PARAMETER CARDS (NO RAW JSON KEYS SHOWN)
+        const cardsHtml = entries.map(([key, meta]) => {
+            const cur = sensorId === 'cabin' ? cabin[key] : tel[key];
+            const pre = sensorId === 'cabin' ? (cabin[key] * 0.98) : (base[key] !== undefined ? base[key] : cur);
+            const isWearable = meta.sourceType === 'wearable';
+            const style = isWearable ? 'bg-slate-950/90 border-sky-500/35' : 'bg-rose-950/25 border-rose-500/35';
+            const tagStyle = isWearable ? 'bg-slate-900 text-sky-300 border-sky-400/50' : 'bg-rose-500/20 text-rose-300 border-rose-500/40';
+
+            return `
+                    <div class="rounded-2xl p-3.5 border ${style} flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div class="space-y-1">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-semibold text-sm text-white">${meta.label}</span>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-mono border ${tagStyle}">${isWearable ? 'WEARABLE (BLACK)' : 'SPACECRAFT MACHINE (RED)'}</span>
+                            </div>
+                            <div class="text-xs text-slate-300">${meta.device}</div>
+                            <div class="text-[11px] font-mono text-slate-400">Pre-Flight Baseline: <span class="text-slate-200">${pre ?? 'N/A'} ${meta.unit}</span></div>
+                        </div>
+                        <div class="sm:text-right font-mono shrink-0 bg-black/40 px-3 py-2 rounded-xl border border-white/5">
+                            <div class="text-base font-bold ${isWearable ? 'text-sky-300' : 'text-rose-300'}">${cur ?? 'N/A'}</div>
+                            <div class="text-[10px] text-slate-400">${meta.unit}</div>
+                        </div>
+                    </div>
+                `;
+        }).join('');
+
+        bodyEl.innerHTML = chartHtml + '<div class="space-y-3 pt-2">' + cardsHtml + '</div>';
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+
+    function renderFullMatrix() {
+        const showOptional = document.getElementById('show-optional-toggle').checked;
+        const matrixBody = document.getElementById('matrix-body');
+        const crew = getActiveCrew();
+        const tel = crew.telemetry || {};
+        const cabin = appJsonState.cabin_environment || {};
+
+        const domainOrder = ['heart', 'brain', 'sleep', 'radiation', 'musculo', 'eyes', 'wrist', 'hearing', 'cabin'];
+        matrixBody.innerHTML = domainOrder.map(dId => {
+            const entries = Object.entries(PARAMETER_REGISTRY).filter(([, meta]) => meta.domain === dId && (showOptional || !meta.redundant));
+            return `
+                    <div class="rounded-2xl bg-space-900/90 border border-slate-800 p-4 space-y-2.5">
+                        <h4 class="text-sm font-bold text-white border-b border-slate-800 pb-2">${DOMAIN_TITLES[dId]}</h4>
+                        <div class="space-y-2">
+                            ${entries.map(([key, meta]) => {
+                const isW = meta.sourceType === 'wearable';
+                const val = dId === 'cabin' ? cabin[key] : tel[key];
+                return `
+                                    <div class="flex items-start justify-between gap-2 text-xs p-2 rounded-xl ${isW ? 'bg-slate-950/80 border border-sky-500/20' : 'bg-rose-950/20 border border-rose-500/20'}">
+                                        <div>
+                                            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full ${isW ? 'bg-sky-400' : 'bg-rose-500'}"></span><span class="font-semibold text-slate-100">${meta.label}</span></div>
+                                            <div class="text-[11px] text-slate-400 mt-0.5">${meta.device}</div>
+                                        </div>
+                                        <div class="text-right font-mono shrink-0">
+                                            <div class="font-semibold ${isW ? 'text-sky-300' : 'text-rose-300'}">${val ?? 'N/A'}</div>
+                                            <div class="text-[10px] text-slate-500">${meta.unit}</div>
+                                        </div>
+                                    </div>
+                                `;
+            }).join('')}
+                        </div>
+                    </div>
+                `;
+        }).join('');
+    }
+
+    function updateDashboardFromJson(jitterActive = false) {
+        const crew = getActiveCrew();
+        const t = crew.telemetry || {};
+        const c = appJsonState.cabin_environment || {};
+        const meta = appJsonState.mission_meta || {};
+
+        const jitter = (r) => (jitterActive && liveJitterEnabled) ? (Math.random() - 0.5) * r : 0;
+
+        document.getElementById('json-source-pill').textContent = `SRC: ${meta.source_file || 'custom.json'}`;
+        document.getElementById('val-eclss_co2').textContent = (Number(c.eclss_co2) + jitter(0.05)).toFixed(1);
+        document.getElementById('val-eclss_o2').textContent = Number(c.eclss_o2).toFixed(1);
+        document.getElementById('val-cabin_pressure').textContent = Number(c.cabin_pressure).toFixed(1);
+        document.getElementById('val-cabin_temp').textContent = `${Number(c.cabin_temp).toFixed(1)}°C`;
+        document.getElementById('val-cabin_humidity').textContent = `${Math.round(Number(c.cabin_humidity))}%`;
+
+        const hr = Math.round(Number(t.hr_resting) + jitter(2));
+        const sys = Math.round(Number(t.bp_systolic) + jitter(2));
+        const dia = Math.round(Number(t.bp_diastolic) + jitter(2));
+        const map = Math.round(dia + (sys - dia) / 3);
+        const radRate = (Number(t.dosimeter_dose_rate) + jitter(0.04)).toFixed(2);
+        const icp = (Number(t.icp_estimated) + jitter(0.2)).toFixed(1);
+        const onsd = Number(t.optic_nerve_sheath_diameter).toFixed(1);
+
+        document.getElementById('val-hr_resting').textContent = hr;
+        document.getElementById('val-bp').textContent = `${sys} / ${dia}`;
+        document.getElementById('val-map').textContent = map;
+        document.getElementById('val-dosimeter_dose_rate').textContent = radRate;
+        document.getElementById('val-cumulative_mission_dose').textContent = Number(t.cumulative_mission_dose).toFixed(1);
+        document.getElementById('val-icp_estimated').textContent = icp;
+        document.getElementById('val-onsd_quick').textContent = onsd;
+
+        document.getElementById('dlg-pvt').textContent = Math.round(Number(t.pvt_reaction_time) + jitter(3));
+        document.getElementById('dlg-icp').textContent = icp;
+        document.getElementById('dlg-onsd').textContent = onsd;
+        document.getElementById('dlg-iop').textContent = Number(t.iop_pressure).toFixed(1);
+        document.getElementById('dlg-hr').textContent = hr;
+        document.getElementById('dlg-sv').textContent = Number(t.sv_index).toFixed(1);
+        document.getElementById('dlg-wbc').textContent = Number(t.wbc_count).toFixed(1);
+        document.getElementById('dlg-cortisol').textContent = Number(t.salivary_cortisol).toFixed(1);
+        document.getElementById('dlg-sleep').textContent = `${t.sleep_duration_hours} hrs`;
+        document.getElementById('dlg-stress').textContent = Number(t.psych_stress_index).toFixed(1);
+        document.getElementById('dlg-hearing').textContent = `+${t.audiometric_loss_db} dB`;
+        document.getElementById('dlg-rad-rate').textContent = radRate;
+        document.getElementById('dlg-dicentric').textContent = Number(t.dicentric_chromosome_freq).toFixed(1);
+        document.getElementById('dlg-bmd').textContent = t.dxa_bmd_tscore;
+        document.getElementById('dlg-spine').textContent = `+${t.spinal_elongation_cm}cm`;
+        document.getElementById('dlg-vo2').textContent = Number(t.vo2_max_estimated).toFixed(1);
+    }
+
+    function handleJsonUpload(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const parsed = JSON.parse(e.target.result);
+                ingestJsonData(parsed, file.name);
+            } catch (err) {
+                showToast(`Invalid JSON: ${err.message}`);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        populateCrewSelector();
+        syncJsonEditorTextarea();
+        initEcgCanvas();
+        updateDashboardFromJson(false);
+
+        setTimeout(drawLeaderLines, 80);
+        window.addEventListener('resize', drawLeaderLines);
+        if ('ResizeObserver' in window) new ResizeObserver(drawLeaderLines).observe(document.getElementById('anatomy-stage'));
+
+        setInterval(() => updateDashboardFromJson(true), 2400);
+
+        document.getElementById('crew-selector').addEventListener('change', (e) => {
+            appJsonState.active_crew_id = e.target.value;
+            syncJsonEditorTextarea();
+            updateDashboardFromJson(false);
+        });
+
+        document.querySelectorAll('.source-filter-btn').forEach(b => {
+            b.addEventListener('click', () => applySourceFilter(b.dataset.filter));
+        });
+
+        document.getElementById('quick-json-upload').addEventListener('change', (e) => {
+            handleJsonUpload(e.target.files[0]);
+            e.target.value = '';
+        });
+        document.getElementById('studio-json-upload').addEventListener('change', (e) => {
+            handleJsonUpload(e.target.files[0]);
+            e.target.value = '';
+        });
+
+        window.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            document.getElementById('drop-overlay').classList.remove('hidden');
+            document.getElementById('drop-overlay').classList.add('flex');
+        });
+        window.addEventListener('dragleave', (e) => {
+            if (e.relatedTarget === null) {
+                document.getElementById('drop-overlay').classList.add('hidden');
+                document.getElementById('drop-overlay').classList.remove('flex');
+            }
+        });
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            document.getElementById('drop-overlay').classList.add('hidden');
+            document.getElementById('drop-overlay').classList.remove('flex');
+            if (e.dataTransfer.files?.[0]) handleJsonUpload(e.dataTransfer.files[0]);
+        });
+
+        document.getElementById('open-json-studio-btn').addEventListener('click', () => {
+            syncJsonEditorTextarea();
+            document.getElementById('json-studio-modal').classList.remove('hidden');
+            document.getElementById('json-studio-modal').classList.add('flex');
+        });
+        document.getElementById('close-json-studio-btn').addEventListener('click', () => {
+            document.getElementById('json-studio-modal').classList.add('hidden');
+            document.getElementById('json-studio-modal').classList.remove('flex');
+        });
+
+        document.getElementById('download-json-btn').addEventListener('click', () => {
+            const blob = new Blob([JSON.stringify(appJsonState, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = appJsonState.mission_meta.source_file || 'aegis9_telemetry.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Exported active .json telemetry payload');
+        });
+
+        document.querySelectorAll('.preset-json-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (btn.dataset.preset === 'nominal') ingestJsonData(DEFAULT_PAYLOAD, 'nominal_flight.json');
+                else if (btn.dataset.preset === 'sans_alert') {
+                    const alt = JSON.parse(JSON.stringify(DEFAULT_PAYLOAD));
+                    alt.mission_meta.source_file = 'sans_icp_alert.json';
+                    alt.crew_profiles.rostova.telemetry.icp_estimated = 19.8;
+                    alt.crew_profiles.rostova.telemetry.optic_nerve_sheath_diameter = 6.4;
+                    ingestJsonData(alt, 'sans_icp_alert.json');
+                }
+            });
+        });
+
+        document.getElementById('apply-json-editor-btn').addEventListener('click', () => {
+            const statusEl = document.getElementById('json-validation-status');
+            try {
+                const parsed = JSON.parse(document.getElementById('json-editor-textarea').value);
+                ingestJsonData(parsed, parsed.mission_meta?.source_file || 'edited_custom.json');
+                statusEl.textContent = '✓ Valid JSON applied successfully';
+                statusEl.className = 'font-mono text-emerald-400';
+                document.getElementById('json-studio-modal').classList.add('hidden');
+                document.getElementById('json-studio-modal').classList.remove('flex');
+            } catch (err) {
+                statusEl.textContent = `✕ JSON Error: ${err.message}`;
+                statusEl.className = 'font-mono text-rose-400';
+            }
+        });
+
+        document.getElementById('live-jitter-toggle').addEventListener('change', (e) => {
+            liveJitterEnabled = e.target.checked;
+            updateDashboardFromJson(false);
+        });
+
+        document.querySelectorAll('[data-sensor]').forEach(el => {
+            el.addEventListener('click', () => openSubsystemModal(el.dataset.sensor));
+        });
+
+        document.getElementById('close-inspector-btn').addEventListener('click', () => {
+            document.getElementById('inspector-modal').classList.add('hidden');
+            document.getElementById('inspector-modal').classList.remove('flex');
+        });
+        document.getElementById('inspector-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'inspector-modal') {
+                e.currentTarget.classList.add('hidden');
+                e.currentTarget.classList.remove('flex');
+            }
+        });
+
+        document.getElementById('open-matrix-btn').addEventListener('click', () => {
+            renderFullMatrix();
+            document.getElementById('matrix-modal').classList.remove('hidden');
+            document.getElementById('matrix-modal').classList.add('flex');
+        });
+        document.getElementById('close-matrix-btn').addEventListener('click', () => {
+            document.getElementById('matrix-modal').classList.add('hidden');
+            document.getElementById('matrix-modal').classList.remove('flex');
+        });
+        document.getElementById('matrix-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'matrix-modal') {
+                e.currentTarget.classList.add('hidden');
+                e.currentTarget.classList.remove('flex');
+            }
+        });
+        document.getElementById('show-optional-toggle').addEventListener('change', renderFullMatrix);
+    });
+</script>
+</body>
+</html>
